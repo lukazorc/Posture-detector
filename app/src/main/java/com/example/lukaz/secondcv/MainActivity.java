@@ -1,22 +1,20 @@
 package com.example.lukaz.secondcv;
 
-import android.content.Context;
 import android.content.Intent;
+;
+import android.hardware.Camera;
 import android.media.AudioManager;
 import android.media.ToneGenerator;
 import android.os.Bundle;
-
-import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
+import java.text.DecimalFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.Date;
+import java.util.List;
 
 import org.opencv.android.BaseLoaderCallback;
 import org.opencv.android.CameraBridgeViewBase;
@@ -27,6 +25,7 @@ import org.opencv.android.OpenCVLoader;
 import org.opencv.core.Core;
 import org.opencv.core.Mat;
 import org.opencv.core.Scalar;
+import org.opencv.core.Size;
 import org.opencv.imgproc.Imgproc;
 import android.app.Activity;
 import android.os.Environment;
@@ -40,17 +39,16 @@ import android.view.SurfaceView;
 
 public class MainActivity extends Activity implements CvCameraViewListener2 {
 
-    private static final String TAG = "OCVSample::Activity";
+    private static final String TAG = "OpenCV Activity";
     private Mat mRgba;
     private Mat mHsv;
     private Mat mMask;
     private Mat mDilated;
     private CameraBridgeViewBase mOpenCvCameraView;
     private Mat hierarchy;
-
+    DecimalFormat df;
     double[] res = {0,0,0,0,0,0};
     double[] rezultat= {0,0,0,0,0,0};
-
     double minX = 99999;
     double maxX = 0;
     double minY = 99999;
@@ -68,24 +66,22 @@ public class MainActivity extends Activity implements CvCameraViewListener2 {
     double distance1 = 9999;
     double distance2 = 9999;
     double distance3 = 9999;
-
     double spodnjiKot = 0;
     double zgornjiKot = 0;
-
     int counter = 0;
     double kot1Skupaj = 0;
     double  kot2Skupaj = 0;
     
-    ToneGenerator toneG = new ToneGenerator(AudioManager.STREAM_ALARM, 80);
+    ToneGenerator toneG = new ToneGenerator(AudioManager.STREAM_ALARM, 100);
+    MyDBHandler dbHandler;
 
     private BaseLoaderCallback mLoaderCallback = new BaseLoaderCallback(this) {
         @Override
         public void onManagerConnected(int status) {
             switch (status) {
                 case LoaderCallbackInterface.SUCCESS: {
-                    Log.i(TAG, "OpenCV loaded successfully");
+                    //Log.i(TAG, "OpenCV loaded successfully");
                     mOpenCvCameraView.enableView();
-                    //mOpenCvCameraView.setOnTouchListener( MainActivity.this);
                 }
                 break;
                 default: {
@@ -97,20 +93,28 @@ public class MainActivity extends Activity implements CvCameraViewListener2 {
     };
 
     public MainActivity() {
-        Log.i(TAG, "Instantiated new " + this.getClass());
+        //Log.i(TAG, "Instantiated new " + this.getClass());
     }
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-        Log.d(TAG, "2 called onCreate");
+        //Log.i(TAG, "called onCreate");
         super.onCreate(savedInstanceState);
         getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         setContentView(R.layout.activity_main);
         mOpenCvCameraView = (CameraBridgeViewBase) findViewById(R.id.tutorial1_activity_java_surface_view);
 
+
+        getWindow().setFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN,
+                WindowManager.LayoutParams.FLAG_FULLSCREEN);
+
+
         mOpenCvCameraView.setVisibility(SurfaceView.VISIBLE);
         mOpenCvCameraView.setCvCameraViewListener(this);
 
+        dbHandler = new MyDBHandler(this, null, null, 1);
+
+        // ostanemo na tem activity-ju za 5s
         final Handler handler = new Handler();
         handler.postDelayed(new Runnable() {
             public void run() {
@@ -123,20 +127,32 @@ public class MainActivity extends Activity implements CvCameraViewListener2 {
 
     @Override
     public void onPause() {
-        Log.d(TAG, "2 called onPause");
-        kot1Skupaj = zgornjiKot/counter;
-        kot2Skupaj = spodnjiKot/counter;
-        Log.d(TAG, "kot1Skupaj (0.173648) = " + kot1Skupaj);
-        Log.d(TAG, "kot2Skupaj (0.5) = " + kot2Skupaj);
-        int opozorilo = 0;
-        //Preglje tudi če je NaN, čeprav dela tudi tako.
-        // send the tone to the "alarm" stream (classic beeps go there) with 80% volume
-        if ((Math.abs(kot1Skupaj) > 0.173648) || (Math.abs(kot2Skupaj) > 0.5)) {
+        //Log.i(TAG, "called onPause");
+        df = new DecimalFormat("##.##"); //format zapisa
+
+        kot1Skupaj = zgornjiKot/counter; //povprečje kota spodnjega dela hrbtenice v 5s
+        kot2Skupaj = spodnjiKot/counter; //povprečje kota zgornjega dela hrbtenice v 5s
+
+        Log.d(TAG, "zgornjiKot: " + String.valueOf(df.format(counter)));
+        Log.d(TAG, "kspodnjiKot: " + String.valueOf(df.format(kot1Skupaj)));
+        Log.d(TAG, "counter: " + String.valueOf(df.format(counter)));
+        Log.d(TAG, "kot1Skupaj: " + String.valueOf(df.format(kot1Skupaj)));
+        Log.d(TAG, "kot2Skupaj: " + String.valueOf(df.format(kot1Skupaj)));
+        int opozorilo = 0; // 0 če sedimo pravilno, 1 v nasportnem primeru
+
+        //Preglej tudi če je NaN, čeprav dela tudi tako.
+        // send the tone to the "alarm" stream (classic beeps go there) with 100% volume
+        if ((Math.abs(kot2Skupaj) > 0.173648) || (Math.abs(kot1Skupaj) > 0.5)) {
             toneG.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 200); // 200 is duration in ms
             opozorilo = 1;
         }
 
-        writeToFile(opozorilo + ", " + Math.toDegrees(Math.acos(kot1Skupaj)) + ", " + Math.toDegrees(Math.acos(kot2Skupaj)));
+        // shranimo podatek o merjenju v datoteko txt
+        writeToFile(opozorilo + ", " + String.valueOf(df.format(Math.toDegrees(Math.acos(kot1Skupaj)))) + ", " + String.valueOf(df.format(Math.toDegrees(Math.acos(kot2Skupaj)))));
+        // shranimo podatek o merjenju v bazo
+        String timeStamp = new SimpleDateFormat("yyyy.MM.dd-HH.mm.ss").format(new Date());
+        saveMeasurement(timeStamp , opozorilo, String.valueOf(Math.toDegrees(Math.acos(kot1Skupaj))), String.valueOf(Math.toDegrees(Math.acos(kot2Skupaj))));
+
         super.onPause();
         if (mOpenCvCameraView != null)
             mOpenCvCameraView.disableView();
@@ -145,10 +161,9 @@ public class MainActivity extends Activity implements CvCameraViewListener2 {
     @Override
     public void onResume() {
         super.onResume();
-        Log.d(TAG, "2 called onResume");
+        //Log.d(TAG, "called onResume");
         //OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION_3_1_0, this,
-         //       mLoaderCallback);
-
+        //       mLoaderCallback);
         if (!OpenCVLoader.initDebug()) {
             Log.d(TAG, "Internal OpenCV library not found. Using OpenCV Manager for initialization");
             OpenCVLoader.initAsync(OpenCVLoader.OPENCV_VERSION_3_1_0, this, mLoaderCallback);
@@ -160,7 +175,7 @@ public class MainActivity extends Activity implements CvCameraViewListener2 {
 
     public void onDestroy() {
         super.onDestroy();
-        Log.d(TAG, "2 called onDestroy");
+        //Log.d(TAG, "called onDestroy");
         if (mOpenCvCameraView != null)
             mOpenCvCameraView.disableView();
     }
@@ -184,7 +199,7 @@ public class MainActivity extends Activity implements CvCameraViewListener2 {
 
         ArrayList<MatOfPoint> contours = new ArrayList<MatOfPoint>();
 
-        Scalar lower = new Scalar(60, 0, 0);
+        Scalar lower = new Scalar(60, 70, 70);
         Scalar upper = new Scalar(150, 255, 255);
         Core.inRange(mHsv, lower, upper, mMask);;
         //Core.bitwise_or(mMask1, mMask2, mMask1);
@@ -220,43 +235,31 @@ public class MainActivity extends Activity implements CvCameraViewListener2 {
                 centroid.y = moments.get_m01() / moments.get_m00();
 
                 final Point[] contArray = contours.get(contourIdx).toArray();
+                try {
+                    res = Elaborate(contArray, centroid);
+                    double prvaTockaX = res[0];
+                    double prvaTockaY = res[1];
+                    double drugaTockaX = res[2];
+                    double drugaTockaY = res[3];
+                    double tretjaTockaX = res[4];
+                    double tretjaTockaY = res[5];
 
-                //Thread t1 = new Thread(new Runnable() {
-                 //   public void run() {
-                        // code goes here.
-                        try {
-                            res = Elaborate(contArray, centroid);
-                            double prvaTockaX = res[0];
-                            double prvaTockaY = res[1];
-                            double drugaTockaX = res[2];
-                            double drugaTockaY = res[3];
-                            double tretjaTockaX = res[4];
-                            double tretjaTockaY = res[5];
+                    spodnjiKot = spodnjiKot + Math.abs(Angle(new Point(tretjaTockaY, (tretjaTockaX - 200)), new Point(drugaTockaY, drugaTockaX), new Point(tretjaTockaY, tretjaTockaX)));
+                    zgornjiKot = zgornjiKot + Math.abs(Angle(new Point(drugaTockaY, drugaTockaX - 200), new Point(prvaTockaY, prvaTockaX), new Point(drugaTockaY, drugaTockaX)));
+                    counter++;
+                    /*
+                    Imgproc.drawMarker(mRgba, new Point(prvaTockaY, prvaTockaX), new Scalar(0, 255, 0));
+                    Imgproc.drawMarker(mRgba, new Point(drugaTockaY, drugaTockaX), new Scalar(0, 255, 0));
+                    Imgproc.drawMarker(mRgba, new Point(tretjaTockaY, tretjaTockaX), new Scalar(0, 255, 0));
+                    Imgproc.drawMarker(mRgba, centroid, new Scalar(0, 0, 255)); //Centroid
+                    */
+                    Imgproc.line(mRgba, new Point(prvaTockaY, prvaTockaX), new Point(drugaTockaY, drugaTockaX), new Scalar(0, 255, 0), 4);
+                    Imgproc.line(mRgba, new Point(drugaTockaY, drugaTockaX), new Point(tretjaTockaY, tretjaTockaX), new Scalar(0, 255, 0), 4);
+                    Imgproc.drawContours(mRgba, contours, contourIdx, new Scalar(255, 0, 0), 2);
 
-                            spodnjiKot = spodnjiKot + Angle(new Point(tretjaTockaY, (tretjaTockaX - 200)), new Point(drugaTockaY, drugaTockaX), new Point(tretjaTockaY, tretjaTockaX));
-                            zgornjiKot = zgornjiKot + Angle(new Point(drugaTockaY, drugaTockaX-200), new Point(prvaTockaY, prvaTockaX), new Point(drugaTockaY, drugaTockaX));
-                            counter++;
-
-                            // send the tone to the "alarm" stream (classic beeps go there) with 80% volume
-                            /*if ((Math.abs(spodnjiKot) > 0.173648) || (Math.abs(zgornjiKot) > 0.5)) {
-                                toneG.startTone(ToneGenerator.TONE_CDMA_ALERT_CALL_GUARD, 200); // 200 is duration in ms
-                            }*/
-                            /*
-                            Imgproc.drawMarker(mRgba, new Point(prvaTockaY, prvaTockaX), new Scalar(0, 255, 0));
-                            Imgproc.drawMarker(mRgba, new Point(drugaTockaY, drugaTockaX), new Scalar(0, 255, 0));
-                            Imgproc.drawMarker(mRgba, new Point(tretjaTockaY, tretjaTockaX), new Scalar(0, 255, 0));
-
-                            Imgproc.drawMarker(mRgba, centroid, new Scalar(0, 0, 255)); //Centroid
-                            */
-                            Imgproc.line(mRgba, new Point(prvaTockaY, prvaTockaX), new Point(drugaTockaY, drugaTockaX), new Scalar(0, 255, 0), 4);
-                            Imgproc.line(mRgba, new Point(drugaTockaY, drugaTockaX), new Point(tretjaTockaY, tretjaTockaX), new Scalar(0, 255, 0), 4);
-                            Imgproc.drawContours(mRgba, contours, contourIdx, new Scalar(255, 0, 0), 2);
-                            
-                        } catch (Exception e) {
-                            Log.d("logic", "1: " + e.toString());
-                        }
-                //    }});
-               // t1.start();
+                } catch (Exception e) {
+                    Log.d(TAG, e.toString());
+                }
             }
 
             prvaTX = 0;
@@ -276,74 +279,61 @@ public class MainActivity extends Activity implements CvCameraViewListener2 {
             distance1 = 9999;
             distance2 = 9999;
             distance3 = 9999;
-            /*
-            try {
-                Thread.sleep(50);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }*/
         }
         return mRgba;
     }
 
-    public double[]  Elaborate (final Point[] contArray, final Point center) {
-        //Thread t1 = new Thread(new Runnable() {
-            //public void run() {
-                try {
-                    // Pozor, x in y kordinate so zamenjane!
-                    int arrLength = contArray.length;
-                    for (int i = 0; i < arrLength; i++) {
+    public double[] Elaborate (final Point[] contArray, final Point center) {
 
-                        if (contArray[i].x < minY) { // najnizja y tocka contoura
-                            minY = contArray[i].x; //najnizji y
-                            minX = contArray[i].y; //najnizji x
-                        }
-
-                        if (contArray[i].x > maxY) { // najvisja y tocka contoura
-                            maxY = contArray[i].x; //najvisji y
-                            maxX = contArray[i].y; //najvisji x
-                        }
-                    }
-                    
-                    visina = (int) (maxY - minY);
-                    najvisjaT = (int)(maxY - (visina/10));
-                    srednjaT = (int)( maxY - (visina/3));
-                    najnizjaT = (int)(maxY - (5*visina/6));
-
-                    distance1 = 9999;
-                    distance2 = 9999;
-                    distance3 = 9999;
-
-                    for (int i = 0; i < arrLength; i++) {
-                        if (contArray[i].y > (center.y)) {
-
-                            if (Math.abs(contArray[i].x - najvisjaT) < distance1) {
-                                distance1 = (Math.abs(contArray[i].x - najvisjaT));
-                                prvaTX = contArray[i].y;
-                                prvaTY = contArray[i].x;
-                            }
-
-                            if (Math.abs(contArray[i].x - srednjaT) < distance2) {
-                                distance2 = (Math.abs(contArray[i].x - srednjaT));
-                                drugaTX = contArray[i].y;
-                                drugaTY = contArray[i].x;
-                            }
-
-                            if (Math.abs(contArray[i].x - najnizjaT) < distance3) {
-                                distance3 = (Math.abs(contArray[i].x - najnizjaT));
-                                tretjaTX = contArray[i].y;
-                                tretjaTY = contArray[i].x;
-                            }
-                        }
-                    }
-                    rezultat = new double[]{prvaTX, prvaTY, drugaTX, drugaTY, tretjaTX, tretjaTY};
-                } 
-                catch (Exception e) {
-                    Log.d("logic", "2: " + e.toString());
+        try {
+            // Pozor, x in y kordinate so zamenjane!
+            int arrLength = contArray.length;
+            for (int i = 0; i < arrLength; i++) {
+                if (contArray[i].x < minY) { // najnizja y tocka contoura
+                    minY = contArray[i].x; //najnizji y
+                    minX = contArray[i].y; //najnizji x
                 }
-            //}
-        //});
-        //t1.start();
+
+                if (contArray[i].x > maxY) { // najvisja y tocka contoura
+                    maxY = contArray[i].x; //najvisji y
+                    maxX = contArray[i].y; //najvisji x
+                }
+            }
+
+            visina = (int) (maxY - minY);
+            najvisjaT = (int)(maxY - (visina/10));
+            srednjaT = (int)( maxY - (visina/3));
+            najnizjaT = (int)(maxY - (5*visina/6));
+            distance1 = 9999;
+            distance2 = 9999;
+            distance3 = 9999;
+
+            for (int i = 0; i < arrLength; i++) {
+                if (contArray[i].y < (center.y)) {
+                    if (Math.abs(contArray[i].x - najvisjaT) < distance1) {
+                        distance1 = (Math.abs(contArray[i].x - najvisjaT));
+                        prvaTX = contArray[i].y;
+                        prvaTY = contArray[i].x;
+                    }
+
+                    if (Math.abs(contArray[i].x - srednjaT) < distance2) {
+                        distance2 = (Math.abs(contArray[i].x - srednjaT));
+                        drugaTX = contArray[i].y;
+                        drugaTY = contArray[i].x;
+                    }
+
+                    if (Math.abs(contArray[i].x - najnizjaT) < distance3) {
+                        distance3 = (Math.abs(contArray[i].x - najnizjaT));
+                        tretjaTX = contArray[i].y;
+                        tretjaTY = contArray[i].x;
+                    }
+                }
+            }
+            rezultat = new double[]{prvaTX, prvaTY, drugaTX, drugaTY, tretjaTX, tretjaTY};
+        }
+        catch (Exception e) {
+            Log.d(TAG, e.toString());
+        }
         return rezultat;
     }
     
@@ -357,11 +347,6 @@ public class MainActivity extends Activity implements CvCameraViewListener2 {
         double dy2 = pt2.y - pt0.y;
         return (dx1*dx2 + dy1*dy2)/Math.sqrt((dx1*dx1 + dy1*dy1)*(dx2*dx2 + dy2*dy2) + 1e-10);
     }
-    /*
-    @Override
-    public boolean onTouch(View v, MotionEvent event) {
-        return false;
-    }*/
 
     private void writeToFile(String data) {
         try {
@@ -370,14 +355,13 @@ public class MainActivity extends Activity implements CvCameraViewListener2 {
             if (!dir.exists()) {
                 dir.mkdirs();
             }
-
             //File sdCard = Environment.getExternalStorageDirectory();
             //File directory = new File (sdCard.getAbsolutePath() + "/MyFiles");
             //directory.mkdirs();
 
             //Generira datum
-            String timeStamp = new SimpleDateFormat("yyyyMMdd_HHmmss").format(Calendar.getInstance().getTime());
-            String timeStamp2 = new SimpleDateFormat("yyyyMMdd").format(Calendar.getInstance().getTime());
+            String timeStamp = new SimpleDateFormat("yyyy.MM.dd-HH.mm.ss").format(Calendar.getInstance().getTime());
+            String timeStamp2 = new SimpleDateFormat("yyyy.MM.dd").format(Calendar.getInstance().getTime());
             //V datoteko potatki.txt pisemo izmerjene podatke.
             File outFile = new File(Environment.getExternalStorageDirectory() +"/PostureCorrectoresults/" ,timeStamp2+".txt");
             FileWriter fw = new FileWriter(outFile, true);
@@ -385,49 +369,15 @@ public class MainActivity extends Activity implements CvCameraViewListener2 {
             fw.append(data);
             fw.append("\n");
             fw.close();
-
-            //ZA REKORD
-            //V datoteko FILENAME pišemo zadnji podatek, ki bo prekril prejsnjega. To rabi samo za prikaz v aplikaciji.
-            /*OutputStreamWriter outputStreamWriter = new OutputStreamWriter(openFileOutput(FILENAME, Context.MODE_PRIVATE));
-            outputStreamWriter.write(timeStamp+" ");
-            outputStreamWriter.write(data);
-            outputStreamWriter.write("\n");
-            outputStreamWriter.close();*/
-
         }
         catch (IOException e) {
             Log.e(TAG, "File write failed: " + e.toString());
         }
     }
-    //ZA REKORD
-    /*
-    private String readFromFile() {
 
-        String ret = "";
-        try {
-            InputStream inputStream = openFileInput(FILENAME);
-
-            if ( inputStream != null ) {
-                InputStreamReader inputStreamReader = new InputStreamReader(inputStream);
-                BufferedReader bufferedReader = new BufferedReader(inputStreamReader);
-                String receiveString = "";
-                StringBuilder stringBuilder = new StringBuilder();
-
-                while ( (receiveString = bufferedReader.readLine()) != null ) {
-                    stringBuilder.append(receiveString);
-                    stringBuilder.append("\n");
-                }
-
-                inputStream.close();
-                ret = stringBuilder.toString();
-            }
-        }
-        catch (FileNotFoundException e) {
-            Log.e(TAG1, "File not found: " + e.toString());
-        } catch (IOException e) {
-            Log.e(TAG1, "Can not read file: " + e.toString());
-        }
-
-        return ret;
-    }*/
+    //Add a product to the database
+    public void saveMeasurement(String date, int opozorilo, String kot1, String kot2){
+        Measurements mea = new Measurements(date, opozorilo, kot1, kot2);
+        dbHandler.addMeasurement(mea);
+    }
 }

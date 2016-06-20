@@ -1,59 +1,58 @@
 package com.example.lukaz.secondcv;
 
 import android.content.Context;
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.os.Bundle;
 import android.os.Handler;
-import android.os.PersistableBundle;
-import android.support.design.widget.FloatingActionButton;
-import android.support.design.widget.Snackbar;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
-
-import org.opencv.android.LoaderCallbackInterface;
-import org.opencv.android.OpenCVLoader;
+import java.io.IOException;
+import java.io.OutputStreamWriter;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 
 public class FirstActivity extends AppCompatActivity {
 
-    private static final String TAG = "OCVSample::Activity";
-   //error
-   boolean clicked;
+    private static final String TAG = "Zacetna stran";
+    int lock; // the lock for the proper button text (Start, Pause, Continue)
     String btnTxt = "";
     SharedPreferences mPrefs;
     final Handler handler = new Handler();
 
-
     @Override
     protected void onCreate(Bundle savedInstanceState) {
-
-        clicked = displayData();
-        if ( clicked == false) {
+        lock = getLock();
+        if (lock==0) {
             btnTxt = "Start";
         }
-        else {
+        else if (lock ==1) {
+            btnTxt = "Continue";
+        }
+        else { //lock == 2
             btnTxt = "Pause";
             delay();
         }
-        Log.d(TAG, "1 called onCreate");
+
+        //Log.d(TAG, "called onCreate");
         super.onCreate(savedInstanceState);
         mPrefs = getPreferences(MODE_PRIVATE);
 
-        //Log.d(TAG, "1 called onCreate3");
         setContentView(R.layout.activity_first);
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
-        final Button b2 = (Button) findViewById(R.id.button2);
+
+        final Button b2 = (Button) findViewById(R.id.button2); //button Stop
         b2.setEnabled(false);
 
         b2.setOnClickListener(
                 new View.OnClickListener() {
                     public void onClick(View v) {
-                        //b2.setText("OK");
+                        lock = 0;
+                        saveLock();
                         Intent toResults = new Intent(FirstActivity.this, ResultsActivity.class);
                         FirstActivity.this.startActivity(toResults);
                         FirstActivity.this.finish();
@@ -61,79 +60,55 @@ public class FirstActivity extends AppCompatActivity {
                 }
         );
 
-        final Button b = (Button) findViewById(R.id.button1);
+        final Button b = (Button) findViewById(R.id.button1); //button Start (Pause, Continue)
         b.setText(btnTxt);
         b.setOnClickListener(
                 new View.OnClickListener() {
                     public void onClick(View v) {
-                        if (clicked == false) {
+                        if (lock == 0) {
                             btnTxt = "Pause";
                             b.setText(btnTxt);
-                            clicked = true;
-                            saveInfo();
-                            delay();
-                        } else {
-                            btnTxt = "Start";
+                            lock = 2;
+                            saveDate(); // save in txt file the time when the measurements started
+                            saveLock(); // save the lock value for the proper button text
+                            delay(); // delay 50s for the next reading
+                        }
+                        else if (lock == 1) {
+                            btnTxt = "Pause";
                             b.setText(btnTxt);
-                            clicked = false;
+                            lock = 2;
+                            saveLock();
+                            delay();
+                        }
+                        else { //lock == 2
+                            btnTxt = "Continue";
+                            b.setText(btnTxt);
                             b2.setEnabled(true);
-                            saveInfo();
-                            delay2();
+                            lock = 1;
+                            saveLock();
+                            delayRemove(); //remove the delay of 50s
                         }
                     }
-                });
-
-        //b.setText(btnTxt);
-        /*
-        b.setOnClickListener(new View.OnClickListener() {
-            @Override
-            public void onClick(View v) {
-                //final int status =(Integer) v.getTag();
-                //if(status == 1) {
-                //b.setText("Pause");
-                   /* btnTxt = b.getText().toString();
-                b.setText(mPrefs.getString("btnTxt", btnTxt));
-
-
-                SharedPreferences.Editor ed = mPrefs.edit();
-                ed.putString(btnTxt, btnTxt);
-                ed.commit();*/
-            /*    clicked = true;
-                //v.setTag(0);
-                Intent intent = new Intent(FirstActivity.this, MainActivity.class);
-                startActivity(intent);
-                //pause
-                //} //else {
-                // b.setText("Start!!");
-                //  v.setTag(1); //pause
-                //}
-            }
-        });*/
-
-
+                }
+        );
     }
 
     public void onPause() {
         super.onPause();
-        Log.d(TAG, "1 called onPause");
-        //finish();
+        //Log.d(TAG, "called onPause");
     }
 
     public void onStop() {
         super.onStop();
-        //Log.d(TAG, "1 called onStop");
-
+        //Log.d(TAG, "called onStop");
     }
 
     public void onDestroy() {
         super.onDestroy();
-        Log.d(TAG, "1 called onDestroy");
+        //Log.d(TAG, "called onDestroy");
     }
 
-    public void pausePro(View view) {
-        clicked = false;
-    }
-
+    //delay 50s to the next reading
     public void delay() {
         final Runnable ri = new Runnable() {
             public void run() {
@@ -145,28 +120,42 @@ public class FirstActivity extends AppCompatActivity {
         handler.postDelayed(ri, 10000);
     }
 
-    public void delay2() {
+    //remove the delay of 50s
+    public void delayRemove() {
         handler.removeCallbacksAndMessages(null);
     }
 
-    public void saveInfo() {
+    // save the lock value for the proper button text (Start, Pause, Continue)
+    public void saveLock() {
         SharedPreferences sharedPref = getSharedPreferences("buttonTxt", Context.MODE_PRIVATE);
-
         SharedPreferences.Editor editor = sharedPref.edit();
-        editor.putBoolean("txt", clicked);
+        editor.putInt("txt", lock);
         editor.apply();
     }
 
-    public boolean displayData() {
-        //try {
-            SharedPreferences sharedPref = getSharedPreferences("buttonTxt", Context.MODE_PRIVATE);
-            Boolean text = sharedPref.getBoolean("txt", false);
-            return  text;
-        //} catch (Exception e) {
-        //    Log.d(TAG, "dispalyData: " + e.toString());
-        //    return false;
-        //}
+    // get the lock value for the proper button text (Start, Pause, Continue)
+    public int getLock() {
+        try {
+        SharedPreferences sharedPref = getSharedPreferences("buttonTxt", Context.MODE_PRIVATE);
+        int text = sharedPref.getInt("txt", 0);
+        return  text;
+        } catch (Exception e) {
+              Log.d(TAG, "dispalyData: " + e.toString());
+            return 0;
+        }
+    }
 
+    public void saveDate() {
+        String timeStamp = new SimpleDateFormat("yyyy.MM.dd-HH.mm.ss").format(new Date());
+        OutputStreamWriter outputStreamWriter = null;
+        try {
+            outputStreamWriter = new OutputStreamWriter(openFileOutput("dateFile.txt", Context.MODE_PRIVATE));
+            outputStreamWriter.write(timeStamp);
+            outputStreamWriter.close();
+        }
+        catch (IOException e) {
+            Log.e(TAG, "File write failed: " + e.toString());
+        }
     }
 }
 
