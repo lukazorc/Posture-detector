@@ -1,4 +1,4 @@
-# Posture-detector
+# Real-time sitting posture detection using Computer Vision
 
 
 Posture detection Setup
